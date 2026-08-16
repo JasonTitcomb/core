@@ -47,8 +47,7 @@ PROGMEM static const alarm_detail_t alarm_detail[] = {
     { Alarm_HomingFail, "Homing fail. Bad configuration." },
     { Alarm_ModbusException, "Modbus exception. Timeout or message error." },
     { Alarm_ExpanderException, "I/O expander communication failed." },
-    { Alarm_NVS_Failed, "Non Volatile Storage (EEPROM) failure." },
-    { Alarm_BufferOverflow, "Buffer overflow." }
+    { Alarm_NVS_Failed, "Non Volatile Storage (EEPROM) failure." }
 };
 
 static alarm_details_t details = {
