@@ -99,7 +99,7 @@ static apply_travel_limits_ptr apply_travel_limits;
 static travel_limits_ptr check_travel_limits;
 #endif
 static arc_limits_ptr check_arc_travel_limits;
-static settings_changed_ptr settings_changed;
+static settings_changed_ptr on_settings_changed;
 static nvs_address_t nvs_address;
 
 // inverse kinematics
@@ -775,10 +775,9 @@ static void delta_settings_changed (settings_t *settings, settings_changed_flags
     get_cuboid_envelope();
 }
 
-static void core_settings_changed (settings_t *settings, settings_changed_flags_t changed)
+static void onSettingsChanged (settings_t *settings, settings_changed_flags_t changed)
 {
-    if(settings_changed)
-        settings_changed(settings, changed);
+    on_settings_changed(settings, changed);
 
     machine.settings_warning = settings->axis[X_AXIS].steps_per_mm != settings->axis[Y_AXIS].steps_per_mm ||
                                 settings->axis[X_AXIS].steps_per_mm != settings->axis[Z_AXIS].steps_per_mm ||
@@ -932,8 +931,8 @@ void delta_robot_init (void)
         on_homing_completed = grbl.on_homing_completed;
         grbl.on_homing_completed = delta_homing_complete;
 
-        settings_changed = hal.settings_changed;
-        hal.settings_changed = core_settings_changed;
+        on_settings_changed = grbl.on_settings_changed;
+        grbl.on_settings_changed = onSettingsChanged;
 
         on_setting_get_description = grbl.on_setting_get_description;
         grbl.on_setting_get_description = delta_setting_get_description;

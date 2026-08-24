@@ -59,7 +59,7 @@ typedef struct {
 static bool jog_cancel = false;
 static machine_t machine = {0};
 static on_report_options_ptr on_report_options;
-static settings_changed_ptr settings_changed;
+static settings_changed_ptr on_settings_changed;
 
 // Returns machine position in mm converted from system position steps.
 // TODO: perhaps change to double precision here - float calculation results in errors of a couple of micrometers.
@@ -304,12 +304,11 @@ static bool wp_homing_cycle (axes_signals_t cycle, axes_signals_t auto_square)
 }
 
 
-static void wp_settings_changed (settings_t *settings, settings_changed_flags_t changed)
+static void onSettingsChanged (settings_t *settings, settings_changed_flags_t changed)
 {
     static bool init_ok = false;
 
-    if(settings_changed)
-        settings_changed(settings, changed);
+    on_settings_changed(settings, changed);
 
     machine.width_mm = -settings->axis[A_MOTOR].max_travel;
     machine.width = (int32_t)(machine.width_mm * settings->axis[A_MOTOR].steps_per_mm);
@@ -344,8 +343,8 @@ void wall_plotter_init (void)
     on_report_options = grbl.on_report_options;
     grbl.on_report_options = report_options;
 
-    settings_changed = hal.settings_changed;
-    hal.settings_changed = wp_settings_changed;
+    on_settings_changed = grbl.on_settings_changed;
+    grbl.on_settings_changed = onSettingsChanged;
 }
 
 #endif

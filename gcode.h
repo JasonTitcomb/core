@@ -845,7 +845,7 @@ status_code_t gc_execute_block (char *block);
 #define gc_sync_position() system_convert_array_steps_to_mpos (gc_state.position, sys.position)
 
 // Sets g-code parser and planner position in mm.
-#define sync_position() plan_sync_position(); system_convert_array_steps_to_mpos (gc_state.position, sys.position)
+#define sync_position() do { plan_sync_position(); system_convert_array_steps_to_mpos(gc_state.position, sys.position); } while(0)
 
 // Set dynamic laser power mode to PPI (Pulses Per Inch)
 // Driver support for pulsing the laser on signal is required for this to work.

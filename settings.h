@@ -1020,7 +1020,8 @@ typedef enum {
     Setting_IsLegacy,
     Setting_IsLegacyFn,
     Setting_IsExpanded,
-    Setting_IsExpandedFn
+    Setting_IsExpandedFn,
+    Setting_MaxType = Setting_IsExpandedFn
 } setting_type_t;
 
 typedef union {
@@ -1154,7 +1155,7 @@ bool settings_override_acceleration (uint8_t axis, float acceleration);
 bool settings_override_jerk (uint8_t axis, float jerk);
 #endif
 
-void settings_register (setting_details_t *details);
+bool settings_register (setting_details_t *details);
 setting_details_t *settings_get_details (void);
 bool settings_is_group_available (setting_group_t group);
 bool settings_iterator (const setting_detail_t *setting, setting_output_ptr callback, void *data);

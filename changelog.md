@@ -1,5 +1,26 @@
 ## grblHAL changelog
 
+<a name="20260824">Build 20260824
+
+Core:
+
+* Increased max. spindle on/off delays \(`$392`, `$394` and `$539`\) to 60 seconds.
+
+* For programmers: removed deprecated `hal.settings_changed` event, hook into `grbl.on_settings_changed` instead.  
+Added some sanity checks for plugin setting registration, returns `false` on failure.
+> [!NOTE]
+> `grbl.on_settings_changed` is set early in the startup sequence so it is not necessary to check for `NULL` on calling the previous entry.
+
+Drivers:
+
+* All: updated for removal of deprecated `hal.settings_changed` event.
+
+Plugins:
+
+* Some: updated for removal of deprecated `hal.settings_changed` event.
+
+---
+
 <a name="20260818">Build 20260818
 
 Core:
