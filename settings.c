@@ -1923,10 +1923,8 @@ FLASHMEM char *setting_get_value (const setting_detail_t *setting, uint_fast16_t
 
             setting_id_t id = (setting_id_t)(setting->id + offset);
 
-            if(setting->get_value == NULL || ((uint32_t)(uintptr_t)setting->get_value & 1) == 0) {
-                value = (char *)"0";
+            if(setting->get_value == NULL)
                 break;
-            }
 
             switch(setting->datatype) {
 
