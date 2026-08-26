@@ -1941,6 +1941,9 @@ FLASHMEM char *setting_get_value (const setting_detail_t *setting, uint_fast16_t
 
             setting_id_t id = (setting_id_t)(setting->id + offset);
 
+            if(setting->get_value == NULL)
+                break;
+
             switch(setting->datatype) {
 
                 case Format_Decimal:
@@ -3091,10 +3094,12 @@ FLASHMEM bool settings_iterator (const setting_detail_t *setting, setting_output
             }
         }
     } else if(setting->flags.increment) {
-        setting_details_t *set;
-        setting = setting_get_details(setting->id, &set);
-        if(set->iterator)
-            ok = set->iterator(setting, callback, data);
+        setting_details_t *set = NULL;
+        const setting_detail_t *s = setting_get_details(setting->id, &set);
+        if(s && set && set->iterator)
+            ok = set->iterator(s, callback, data);
+        else
+            ok = callback(setting, 0, data);
     } else
         ok = callback(setting, 0, data);
 
