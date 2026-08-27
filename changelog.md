@@ -1,5 +1,30 @@
 ## grblHAL changelog
 
+<a name="20260827">Build 20260827
+
+Core:
+
+* General fix to remove reporting of unavailable iterative settings.
+
+* For programmers: added initial version of `stream_is_busy()` API call. Needs testing.  
+Added status request timestamp field to UART `io_stream_status_t` struct.
+
+Drivers:
+
+* MSP432P401R: added code to set new UART status request timestamp field.
+
+* STM32F7xx: updated to ensure correct sequencing of all USB stream output.
+
+Plugins:
+
+* Misc, homing pulloff: added optional defines for default setting values, `DEFAULT_X_HOMING_PULLOFF` etc.
+
+* Networking: added optional keepalive support to telnet daemon, enable by defining the symbol `LWIP_TCP_KEEPALIVE` > 0.
+Override the symbols `TCP_KEEPIDLE_DEFAULT`, `TCP_KEEPINTVL_DEFAULT` and `TCP_KEEPCNT_DEFAULT` as needed. Later settings might be added for these.  
+Ref. [RFC 1122 4.2.3.6 TCP Keep-Alives](https://www.rfc-editor.org/rfc/rfc1122.html#page-101) and issue [#23](https://github.com/grblHAL/Plugin_networking/issues/23).
+
+---
+
 <a name="20260824">Build 20260824
 
 Core:

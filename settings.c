@@ -1941,10 +1941,7 @@ FLASHMEM char *setting_get_value (const setting_detail_t *setting, uint_fast16_t
 
             setting_id_t id = (setting_id_t)(setting->id + offset);
 
-            if(setting->get_value == NULL)
-                break;
-
-            switch(setting->datatype) {
+            if(setting->get_value) switch(setting->datatype) {
 
                 case Format_Decimal:
                     value = ftoa(((setting_get_float_ptr)(setting->get_value))(id), get_decimal_places(setting->format));
@@ -2128,12 +2125,14 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
             available = !hal.driver_cap.atc;
             break;
 
+        case Setting_AxisAutoSquareOffset:
+            available = hal.stepper.get_ganged && bit_istrue(hal.stepper.get_ganged(true).mask, bit(offset));
+            break;
+
         case Setting_DualAxisLengthFailPercent:
         case Setting_DualAxisLengthFailMin:
         case Setting_DualAxisLengthFailMax:
-        case Setting_AxisAutoSquareOffset:
             available = hal.stepper.get_ganged && hal.stepper.get_ganged(true).mask != 0;
-//            available = hal.stepper.get_ganged && bit_istrue(hal.stepper.get_ganged(true).mask, setting->id - Setting_AxisAutoSquareOffset);
             break;
 
         case Setting_AxisHomingFeedRate:
@@ -3094,12 +3093,9 @@ FLASHMEM bool settings_iterator (const setting_detail_t *setting, setting_output
             }
         }
     } else if(setting->flags.increment) {
-        setting_details_t *set = NULL;
-        const setting_detail_t *s = setting_get_details(setting->id, &set);
-        if(s && set && set->iterator)
-            ok = set->iterator(s, callback, data);
-        else
-            ok = callback(setting, 0, data);
+        setting_details_t *set;
+        if((setting = setting_get_details(setting->id, &set)) && set && set->iterator)
+            ok = set->iterator(setting, callback, data);
     } else
         ok = callback(setting, 0, data);
 
