@@ -75,7 +75,6 @@ DCRAM grbl_t grbl;
 DCRAM grbl_hal_t hal;
 
 static driver_startup_t driver = { .ok = 0xFF };
-static settings_changed_ptr hal_settings_changed;
 static stepper_enable_ptr stepper_enable;
 DCRAM static struct {
     volatile core_task_t *immediate;     //!< Pointer to first entry of linked list of tasks to run immediately.
@@ -239,12 +238,9 @@ FLASHMEM static void tool_changed (tool_data_t *tool)
     }
 }
 
-FLASHMEM static void settings_changed (settings_t *settings, settings_changed_flags_t changed)
+FLASHMEM static void dummy_on_settings_changed (settings_t *settings, settings_changed_flags_t changed)
 {
-    hal_settings_changed(settings, changed);
-
-    if(grbl.on_settings_changed)
-        grbl.on_settings_changed(settings, changed);
+	// NOOP
 }
 
 FLASHMEM static atc_status_t atc_get_state (void)
@@ -270,6 +266,7 @@ FLASHMEM int grbl_enter (void)
     grbl.enqueue_gcode = protocol_enqueue_gcode;
     grbl.enqueue_realtime_command = stream_enqueue_realtime_command;
     grbl.on_report_options = dummy_bool_handler;
+    grbl.on_settings_changed = dummy_on_settings_changed;
     grbl.on_report_command_help = system_command_help;
     grbl.on_get_alarms = alarms_get_details;
     grbl.on_get_errors = errors_get_details;
@@ -343,6 +340,11 @@ FLASHMEM int grbl_enter (void)
     polar_init();
 #endif
 
+#if RTCP_AC
+    extern void rtcp_ac_init (void);
+    rtcp_ac_init();
+#endif
+
 #if defined(ASYMMETRIC_GANGING) || defined(ASYMMETRIC_AUTO_SQUARE)
     extern void asymmetric_ganging_init (void);
     asymmetric_ganging_init();
@@ -378,9 +380,6 @@ FLASHMEM int grbl_enter (void)
     sys.mpg_mode = false;
 
     if((sys.ioinit_pending = driver.ok == 0xFF)) {
-
-        hal_settings_changed = hal.settings_changed;
-        hal.settings_changed = settings_changed;
 
         driver.setup = hal.driver_setup(&settings);
 

@@ -651,7 +651,6 @@ typedef struct {
     spindle_data_ptrs_t spindle_data;       //!< Handlers for getting/resetting spindle data (RPM, angular position, ...).
     stepper_ptrs_t stepper;                 //!< Handlers for stepper motors.
     io_stream_t stream;                     //!< Handlers for stream I/O.
-    settings_changed_ptr settings_changed;  //!< Deprecated, hook into grbl.on_settings_changed in new code.
     probe_ptrs_t probe;                     //!< Optional handlers for probe input(s).
     tool_ptrs_t tool;                       //!< Optional handlers for tool changes.
     timer_ptrs_t timer;                     //!< Optional handlers for claiming and controlling timers.

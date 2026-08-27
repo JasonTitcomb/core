@@ -460,9 +460,29 @@ static inline bool is_hidden (const setting_detail_t *setting)
     return (setting->id == Setting_HomingFeedRate || setting->id == Setting_HomingSeekRate) ? settings.homing.flags.per_axis_feedrates : setting->flags.hidden;
 }
 
+FLASHMEM static bool _is_setting_available (const setting_detail_t *setting, uint_fast16_t offset, void *data)
+{
+    *((bool *)data) = true;
+
+    return false;
+}
+
+FLASHMEM static bool is_setting_available (const setting_detail_t *setting)
+{
+    bool ok;
+
+    if(!(ok = setting->is_available == NULL)) {
+        if(setting->flags.increment)
+            settings_iterator(setting, _is_setting_available, &ok);
+        else
+            ok = setting->is_available(setting, 0);
+    }
+
+    return ok;
+}
+
 FLASHMEM void report_grbl_settings (bool all, void *data)
 {
-
     uint_fast16_t idx, n_settings = 0;
     const setting_detail_t *setting;
     setting_detail_t **all_settings, **psetting;
@@ -481,8 +501,9 @@ FLASHMEM void report_grbl_settings (bool all, void *data)
         // Report core settings
         for(idx = 0; idx < details->n_settings; idx++) {
             setting = &details->settings[idx];
-            if(!is_hidden(setting) && (all || setting->type == Setting_IsLegacy || setting->type == Setting_IsLegacyFn) &&
-                  (setting->is_available == NULL ||setting->is_available(setting, 0))) {
+            if(!is_hidden(setting) &&
+                 (all || setting->type == Setting_IsLegacy || setting->type == Setting_IsLegacyFn) &&
+                   is_setting_available(setting)) {
                 *psetting++ = (setting_detail_t *)setting;
                 n_settings++;
             }
@@ -492,7 +513,7 @@ FLASHMEM void report_grbl_settings (bool all, void *data)
         if(all && (details = details->next)) do {
             for(idx = 0; idx < details->n_settings; idx++) {
                 setting = &details->settings[idx];
-                if(!setting->flags.hidden && (setting->is_available == NULL || setting->is_available(setting, 0))) {
+                if(!setting->flags.hidden && is_setting_available(setting)) {
                     *psetting++ = (setting_detail_t *)setting;
                     n_settings++;
                 }
@@ -507,7 +528,7 @@ FLASHMEM void report_grbl_settings (bool all, void *data)
         free(all_settings);
 
     } else do {
-        for(idx = 0; idx < n_settings; idx++)
+        for(idx = 0; idx < details->n_settings; idx++)
             settings_iterator(&details->settings[idx], print_setting, data);
     } while((details = details->next));
 }
@@ -759,6 +780,15 @@ FLASHMEM void report_gcode_modes (stream_write_ptr stream_write)
     if(settings.mode == Mode_Lathe && gc_spindle_get(0)->hal->cap.variable)
         stream_write(gc_spindle_get(0)->rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
 
+#if CUTTER_COMP_ENABLE
+    stream_write(" G");
+    stream_write(uitoa(40 + gc_state.modal.cutter_comp.side));
+    if(gc_state.modal.cutter_comp.side && gc_state.modal.cutter_comp.dynamic)
+        stream_write(".1");
+#else
+    stream_write(" G40");
+#endif
+
 #if COMPATIBILITY_LEVEL < 10
 
     if(gc_state.modal.tool_offset_mode == ToolLengthOffset_Cancel)
@@ -994,6 +1024,9 @@ FLASHMEM void report_build_info (char *line, bool extended)
         #endif
         strcat(buf, settings.flags.legacy_rt_commands ? "+," : "-,");
 
+#if CUTTER_COMP_ENABLE
+        strcat(buf, "CCMP,");
+#endif
         if(settings.homing.flags.enabled)
             strcat(buf, "HOME,");
 
@@ -1008,6 +1041,11 @@ FLASHMEM void report_build_info (char *line, bool extended)
             if(hal.signals_cap.probe_disconnected)
                 strcat(buf, "PC,");
         }
+
+#if N_AXIS > 3
+        if(settings.flags.rotary_fix_enable)
+            strcat(buf, "RF,");
+#endif
 
         if(hal.signals_cap.stop_disable)
             strcat(buf, "OS,");
@@ -1034,9 +1072,9 @@ FLASHMEM void report_build_info (char *line, bool extended)
         if(hal.reboot)
             strcat(buf, "REBOOT,");
 
-    #if NGC_EXPRESSIONS_ENABLE
+#if NGC_EXPRESSIONS_ENABLE
         strcat(buf, "EXPR,");
-    #endif
+#endif
 
         if(atc != ATC_None || (settings.tool_change.mode != ToolChange_Ignore && !!hal.stream.suspend_read))
             strcat(buf, atc == ATC_None ? "TC," : (atc == ATC_Online ? "ATC=1," : "ATC=0,")); // Tool change supported (M6)
@@ -1052,9 +1090,9 @@ FLASHMEM void report_build_info (char *line, bool extended)
         if(canbus_enabled())
             strcat(buf, "CAN,");
 
-    #ifdef PID_LOG
+#ifdef PID_LOG
         strcat(buf, "PID,");
-    #endif
+#endif
 
         append = &buf[strlen(buf) - 1];
         if(*append == ',')
@@ -1944,7 +1982,7 @@ FLASHMEM static bool print_sorted (const setting_detail_t *setting, uint_fast16_
 FLASHMEM static bool print_unsorted (const setting_detail_t *setting, uint_fast16_t offset, void *args)
 {
     if(!(((report_args_t *)args)->group == setting->group && ((report_args_t *)args)->offset != offset) &&
-       (setting->is_available == NULL ||setting->is_available(setting, 0)))
+       (setting->is_available == NULL ||setting->is_available(setting, offset)))
         report_settings_detail(((report_args_t *)args)->format, setting, offset);
 
     return true;
@@ -1981,7 +2019,7 @@ FLASHMEM static status_code_t print_settings_details (settings_format_t format, 
         do {
             for(idx = 0; idx < details->n_settings; idx++) {
                 setting = &details->settings[idx];
-                if(!is_hidden(setting) && (group == Group_All || setting->group == args.group) && (setting->is_available == NULL || setting->is_available(setting, 0))) {
+                if(!is_hidden(setting) && (group == Group_All || setting->group == args.group) && is_setting_available(setting)) {
                     *psetting++ = (setting_detail_t *)setting;
                     n_settings++;
                 }

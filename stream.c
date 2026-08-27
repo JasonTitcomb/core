@@ -219,7 +219,7 @@ ISR_CODE bool ISR_FUNC(stream_buffer_all)(uint8_t c)
 
 ISR_CODE bool ISR_FUNC(stream_enqueue_realtime_command)(uint8_t c)
 {
-	bool drop = hal.stream.enqueue_rt_command ? hal.stream.enqueue_rt_command(c) : protocol_enqueue_realtime_command(c);
+    bool drop = hal.stream.enqueue_rt_command ? hal.stream.enqueue_rt_command(c) : protocol_enqueue_realtime_command(c);
 
     if(drop && (c == CMD_CYCLE_START || c == CMD_CYCLE_START_LEGACY) && state_get() == STATE_IDLE)
         report_add_realtime(Report_CycleStart);
@@ -339,31 +339,31 @@ FLASHMEM static bool stream_select (const io_stream_t *stream, bool add)
     if(!add) { // disconnect
 
         if(stream == base.stream || stream == &mpg.stream)
-        	return false;
+            return false;
 
         bool disconnected = false;
         stream_connection_t *connection = connections->next;
 
         while(connection) {
-        	if(stream == connection->stream) {
-        		if((connection->prev->next = connection->next))
-        			connection->next->prev = connection->prev;
+            if(stream == connection->stream) {
+                if((connection->prev->next = connection->next))
+                    connection->next->prev = connection->prev;
                 if((stream = connection->prev->stream) == &mpg.stream) {
-                	mpg_enable = mpg.flags.mpg_control;
-                	if((stream = connection->prev->prev->stream) == NULL)
-                		stream = base.stream;
+                    mpg_enable = mpg.flags.mpg_control;
+                    if((stream = connection->prev->prev->stream) == NULL)
+                        stream = base.stream;
                 }
                 free(connection);
-        		connection = NULL;
-        		disconnected = true;
-        	} else
-        		connection = connection->next;
+                connection = NULL;
+                disconnected = true;
+            } else
+                connection = connection->next;
         }
 
         if(!disconnected)
-        	return false;
+            return false;
 
-	} else if(add_connection(stream) == NULL)
+    } else if(add_connection(stream) == NULL)
         return false;
 
     switch(stream->type) {
@@ -403,7 +403,7 @@ FLASHMEM static bool stream_select (const io_stream_t *stream, bool add)
         stream_mpg_enable(false);
         mpg.flags.mpg_control = On;
     } else if(mpg_enable)
-		task_add_immediate(stream_mpg_set_mode, (void *)1);
+        task_add_immediate(stream_mpg_set_mode, (void *)1);
 
     memcpy(&hal.stream, stream, offsetof(io_stream_t, report));
 
@@ -704,6 +704,24 @@ FLASHMEM static void report_mpg_mode (void *data)
     protocol_enqueue_realtime_command((uint8_t)((uintptr_t)data));
 }
 
+FLASHMEM bool stream_is_busy (bool is_connected)
+{
+    sys_state_t state = state_get();
+
+    if(is_connected) {
+        if(stream_is_uart(hal.stream.type)) {
+            const io_stream_status_t *status;
+            if((status = stream_get_uart_status(hal.stream.instance))) {
+                is_connected = status->last_status_request && hal.get_elapsed_ticks() - status->last_status_request < 5000;
+            } else
+                is_connected = false;
+        } else
+            is_connected = hal.stream.is_connected();
+    }
+
+    return is_connected || gc_state.file_run || !(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP)));
+}
+
 FLASHMEM bool stream_mpg_enable (bool on)
 {
     static io_stream_t org_stream = {
@@ -713,10 +731,8 @@ FLASHMEM bool stream_mpg_enable (bool on)
     if(mpg.stream.read == NULL)
         return false;
 
-    sys_state_t state = state_get();
-
     // Deny entering MPG mode if busy
-    if(on == sys.mpg_mode || (on && (gc_state.file_run || !(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP)))))) {
+    if(on == sys.mpg_mode || (on && stream_is_busy(false))) {
         task_add_delayed(report_mpg_mode, (void *)CMD_STATUS_REPORT_ALL, 5);
         return false;
     }

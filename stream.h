@@ -392,8 +392,9 @@ typedef struct {
 typedef struct {
     io_stream_state_t state;                                //!< Optional status flags such as connected status.
     io_stream_flags_t flags;                                //!< Stream capability flags.
+    serial_format_t format;                                 //!< Stream format: data length (bits), parity, stop bits.
     uint32_t baud_rate;
-    serial_format_t format;
+    uint32_t last_status_request;                           //!< Timestamp of last status request received.
 } io_stream_status_t;
 
 typedef const io_stream_t *(*stream_claim_ptr)(uint32_t baud_rate);
@@ -503,6 +504,8 @@ bool stream_connect_instance (uint8_t instance, uint32_t baud_rate);
 void stream_disconnect (const io_stream_t *stream);
 
 bool stream_connected (void);
+
+bool stream_is_busy (bool is_connected);
 
 bool stream_await_tx_clear (const io_stream_t *stream);
 

@@ -81,7 +81,7 @@ struct st2_motor {
 
 static st2_motor_t *motors = NULL;
 static uint8_t spindle_motors = 0;
-static settings_changed_ptr settings_changed;
+static settings_changed_ptr on_settings_changed;
 static on_set_axis_setting_unit_ptr on_set_axis_setting_unit = NULL;
 static on_setting_get_description_ptr on_setting_get_description;
 static on_reset_ptr on_reset;
@@ -121,11 +121,11 @@ FLASHMEM static void st2_reset (void)
 \param settings pointer to a \a settings_t structure.
 \param changed a \a settings_changed_flags_t structure.
 */
-FLASHMEM static void st2_settings_changed (settings_t *settings, settings_changed_flags_t changed)
+FLASHMEM static void onSettingsChanged (settings_t *settings, settings_changed_flags_t changed)
 {
     st2_motor_t *motor = motors;
 
-    settings_changed(settings, changed);
+    on_settings_changed(settings, changed);
 
     while(motor) {
         if(motor->is_bound)
@@ -291,8 +291,8 @@ FLASHMEM st2_motor_t *st2_motor_init (uint_fast8_t axis_idx, bool is_spindle)
         if(new == NULL) {
             motors = motor;
 
-            settings_changed = hal.settings_changed;
-            hal.settings_changed = st2_settings_changed;
+            on_settings_changed = grbl.on_settings_changed;
+            grbl.on_settings_changed = onSettingsChanged;
 
             on_reset = grbl.on_reset;
             grbl.on_reset = st2_reset;

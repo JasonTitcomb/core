@@ -465,6 +465,8 @@ typedef enum {
     // 683 - 689 - reserved for Sienci
 
     Setting_SubroutineOptions = 700,
+    Setting_RotaryOptions = 701,
+    Setting_CutterCompOptions = 702,
 
     Setting_SpindlePWMOptions1 = 709,
 
@@ -610,7 +612,12 @@ typedef union {
                  keep_rapids_override_on_reset   :1,
                  keep_feed_override_on_reset     :1,
                  m98_prescan_enable              :1,
-                 unassigned                      :8;
+                 rotary_fix_enable               :1,
+                 revert_metric_conversion        :1, // For rotary axes inch/min -> mm/min
+                 set_rpm_0_during_hold           :1,
+                 cc_lookahead_enable             :1, // For cutter compensation
+                 cc_chamfer_corner               :1, // For cutter compensation
+                 unassigned                      :3;
     };
 } settingflags_t;
 
@@ -1025,7 +1032,8 @@ typedef enum {
     Setting_IsLegacy,
     Setting_IsLegacyFn,
     Setting_IsExpanded,
-    Setting_IsExpandedFn
+    Setting_IsExpandedFn,
+    Setting_MaxType = Setting_IsExpandedFn
 } setting_type_t;
 
 typedef union {
@@ -1159,7 +1167,7 @@ bool settings_override_acceleration (uint8_t axis, float acceleration);
 bool settings_override_jerk (uint8_t axis, float jerk);
 #endif
 
-void settings_register (setting_details_t *details);
+bool settings_register (setting_details_t *details);
 setting_details_t *settings_get_details (void);
 bool settings_is_group_available (setting_group_t group);
 bool settings_iterator (const setting_detail_t *setting, setting_output_ptr callback, void *data);

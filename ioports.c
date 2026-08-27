@@ -1629,8 +1629,7 @@ FLASHMEM static void ioports_configure (settings_t *settings)
 
 FLASHMEM static void onSettingsChanged (settings_t *settings, settings_changed_flags_t changed)
 {
-    if(on_settings_changed)
-        on_settings_changed(settings, changed);
+    on_settings_changed(settings, changed);
 
     if(sys.ioinit_pending)
         ioports_configure(settings);
