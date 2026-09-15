@@ -1,5 +1,101 @@
 ## grblHAL changelog
 
+<a name="20260909">20260909
+
+Plugins:
+
+* Laser, Ligthburn cluster: fix for issue [#5](https://github.com/grblHAL/Plugins_laser/issues/5) - compilation failure.
+
+* Keypad: added support for e-stop realtime command.
+
+---
+
+<a name="20260908">Build 20260908
+
+Core:
+
+* Added realtime command `0x9F` (`159` - _soft e-stop_) that execute a soft reset, raises the e-stop alarm (10) and enters the controllers e-stop state.
+> [!NOTE]
+> This does _not_ cut power to steppers and spindles (or other relevant devices) like a properly implemented physical e-stop should do.
+
+* For programmers: changed signature of `system_execute_line()`, added pointer to stream write function to receive command output. 
+
+* For pendant developers: added support for some $-commands when MPG stream is not in full control: `$G`, `$#`, `$X` and `$<n>` where `<n>` is a settings number.
+> [!NOTE]
+> Other commands will return `error:78` (Access denied) or `error:3` (Unsupported command). If the input is empty (end of line only) `ok` will be returned. Not available if the keypad plugin shares the MPG stream.
+
+Plugins:
+
+* Keypad, WebUI, HPGL: updated for core signature change.
+
+---
+
+<a name="20260905">Build 20260905
+
+Core:
+
+* Refactored stream handling to get rid of some problematic stream types, may cause some 3rd party plugins to fail compilation.
+
+* Added setting $720 for pendant baud rate, defaults to 1 (115200 baud). Reserved 8 setting ids (722 - 729) for MPG/Pendant plugins.
+Ref. discussion [#1000](https://github.com/grblHAL/core/discussions/1000).
+
+* Fixed `G65P7` handling of bit packed modbus messages, funtions 1, 2 and 15. Ref issue [#1011](https://github.com/grblHAL/core/issues/1011).
+> [!NOTE]
+> Only tested against a simulator of my own making, I do not have a certified device to test against.
+
+Drivers:
+
+* ESP32: reorganized networking code for readability.
+
+Plugins:
+
+* Keypad, UART mode: updated to share UART stream with MPG/pendant plugins that registers itself with the core.
+
+* Networking, WizNet: added 1ms poll of interface chip as a potential workaround for occasionally lost IRQs.
+Ref. issue [#24](https://github.com/grblHAL/Plugin_networking/issues/24).
+
+* Embroidery, Bluetooth, Networking, SD card and WebUI: updated for refactored stream handling.
+
+---
+
+<a name="20260902">Build 20260902
+
+Core:
+
+* Improved settings iteration handling.
+
+Plugins:
+
+* Encoders, Keypad (macros), Networking (modbus client), Misc (eventout) and Spindle: improved settings iteration handling..
+
+* Plasma: fixed regression. Ref. issue [#1009](https://github.com/grblHAL/core/issues/1009).
+
+* Networking, httpd: "hardened" code again.
+
+---
+
+<a name="20260831">Build 20260831
+
+Core:
+
+* Improved settings description handling.
+
+* Removed some non-core settings iterator code.
+
+* Added 5% rapids override real time command (`0x98`).
+
+* Assymmetric ganging kinematics: fixed homing for ganged only motors. 
+
+Plugins:
+
+* Encoders, Networking (modbus client) and Spindle: moved settings iterator code locally.
+
+* Spindle: fixed NULL settings description that caused a validation failure.
+
+* Networking, httpd: "hardened" code.
+
+--- 
+
 <a name="20260827">Build 20260827
 
 Core:

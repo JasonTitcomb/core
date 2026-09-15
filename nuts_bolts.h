@@ -61,7 +61,7 @@
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? (c & 0x5F) : c)
 #define LCAPS(c) ((c >= 'A' && c <= 'Z') ? (c | 0x20) : c)
 
-#if !(defined(STM32F103xB) || defined(STM32F303xC))
+#if !(defined(STM32F103xB) || defined(STM32F303xC) || defined(STM32F756xx) || defined(STM32F765xx))
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -534,7 +534,7 @@ void dummy_handler (void);
 
 #ifdef _WIN32
 
-static int ffs (int i)
+static inline int ffs (int i)
 {
     int idx = 0;
 
@@ -550,5 +550,27 @@ static int ffs (int i)
 
 #endif // _WIN32
 
+#if defined(_WIN32) || defined(__MSP432P401R__) || defined(PART_TM4C123GH6PM)
+
+static inline size_t strlcpy (char *dst, const char *src, size_t len)
+{
+    const char *s = src;
+    size_t dlen = len;
+
+    if(dlen) while(--dlen) {
+        if(!(*dst++ = *s++))
+            break;
+    }
+
+    if(dlen == 0) {
+        if(len)
+            *dst = '\0';
+        while(*s++);
+    }
+
+    return s - src - 1;
+}
+
+#endif // _WIN32 || __MSP432P401R__ || PART_TM4C123GH6PM
 
 #endif

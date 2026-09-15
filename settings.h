@@ -472,6 +472,17 @@ typedef enum {
 
     Setting_SpindleInvertMask1 = 716,
 
+    Settings_MPG_BaudRate = 720,
+    Settings_MPG_Port = 721, // UART instance
+    // 722 - 729 reserved for MPG/pendant plugin code
+    Settings_MPG_0 = 722,
+    Settings_MPG_1 = 723,
+    Settings_MPG_2 = 724,
+    Settings_MPG_3 = 725,
+    Settings_MPG_4 = 726,
+    Settings_MPG_5 = 727,
+    Settings_MPG_6 = 728,
+    Settings_MPG_7 = 729,
     Setting_RpmMax1 = 730,
     Setting_RpmMin1 = 731,
     Setting_Mode1 = 732,
@@ -882,6 +893,7 @@ typedef union {
 } cutter_comp_flags_t;
 
 typedef struct {
+    uint8_t port; // UART instance
     uint8_t baud_rate;
     uint8_t stream_format;
     uint8_t rx_timeout;
@@ -939,7 +951,10 @@ typedef struct {
     tool_id_t tool_id;
     serial_format_t modbus_stream_format; // TODO: remove in next version
     cutter_comp_flags_t cutter_comp_flags;
+    uint8_t mpg_baud_rate;
+    uint8_t mpg_uart_instance;    // Currently unused by the core.
     char reserved[8];             // Reserved For future expansion
+
 } settings_t;
 
 typedef enum {
@@ -985,18 +1000,19 @@ typedef enum {
     Group_Embroidery,           //!< 39
     Group_Panel,                //!< 40
     Group_Kinematics,           //!< 41
-    Group_Axis,                 //!< 42
+    Group_MPG,                  //!< 42
+    Group_Axis,                 //!< 43
 // NOTE: axis groups MUST be sequential AND last
-    Group_Axis0,                //!< 43
-    Group_XAxis = Group_Axis0,  //!< 44
-    Group_YAxis,                //!< 45
-    Group_ZAxis,                //!< 46
-    Group_AAxis,                //!< 47
-    Group_BAxis,                //!< 48
-    Group_CAxis,                //!< 49
-    Group_UAxis,                //!< 50
-    Group_VAxis,                //!< 51
-    Group_WAxis,                //!< 52
+    Group_Axis0,                //!< 44
+    Group_XAxis = Group_Axis0,  //!< 45
+    Group_YAxis,                //!< 46
+    Group_ZAxis,                //!< 47
+    Group_AAxis,                //!< 48
+    Group_BAxis,                //!< 49
+    Group_CAxis,                //!< 50
+    Group_UAxis,                //!< 51
+    Group_VAxis,                //!< 52
+    Group_WAxis,                //!< 53
     Group_Unknown = 99,         //!< 99
     Group_All = Group_Root      //!< 0
 } setting_group_t;
@@ -1103,7 +1119,21 @@ typedef void (*settings_changed_ptr)(settings_t *settings, settings_changed_flag
 typedef void (*driver_settings_load_ptr)(void);
 typedef void (*driver_settings_save_ptr)(void);
 typedef void (*driver_settings_restore_ptr)(void);
+
+/*! \brief Pointer to function to iterate over iterated settings.
+NOTES: The iterator should only iterate over available settings.
+If the callback returns false iteration should be terminated.
+\param settings pointer to \a setting_detail_t struct containing the setting data.
+\param callback a \a setting_output_ptr to be called for each iteration.
+\param data an optional pointer to data to be passed to the callback.
+\return \a false when false is returned by the callback else \a true.
+*/
 typedef bool (*driver_settings_iterator_ptr)(const setting_detail_t *setting, setting_output_ptr callback, void *data);
+
+/*! \brief Pointer to function to normalize iterated settings to the base settings id.
+\param id a \a setting_id_t enum value.
+\returns the base id if the id is recognized or 0 if not.
+*/
 typedef setting_id_t (*driver_settings_normalize_ptr)(setting_id_t id);
 
 typedef struct setting_details {

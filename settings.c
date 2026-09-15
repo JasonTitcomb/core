@@ -405,13 +405,28 @@ PROGMEM static const settings_t defaults = {
     .modbus_stream_format.stopbits = DEFAULT_MODBUS_STREAM_STOP_BITS,
     .modbus_stream_format.parity = DEFAULT_MODBUS_STREAM_PARITY,
 
+    .mpg_baud_rate = DEFAULT_MPG_BAUD,
+
     .rgb_strip.length0 = DEFAULT_RGB_STRIP0_LENGTH,
     .rgb_strip.length1 = DEFAULT_RGB_STRIP1_LENGTH
 };
 
 static bool group_is_available (const setting_group_detail_t *group)
 {
-    return group->id < Group_XAxis || group->id > Group_WAxis || group->id < Group_Axis0 + system_n_axis();
+    bool available;
+
+    switch(group->id) {
+
+        case Group_MPG:
+            available = hal.driver_cap.mpg_mode;
+            break;
+
+        default:
+            available = group->id < Group_XAxis || group->id > Group_WAxis || group->id < Group_Axis0 + system_n_axis();
+            break;
+    }
+
+    return available;
 }
 
 PROGMEM static const setting_group_detail_t setting_group_detail [] = {
@@ -430,6 +445,7 @@ PROGMEM static const setting_group_detail_t setting_group_detail [] = {
      { Group_Root, Group_Jogging, "Jogging"},
      { Group_Root, Group_Stepper, "Stepper" },
      { Group_Root, Group_MotorDriver, "Stepper driver" },
+     { Group_Root, Group_MPG, "MPG/Pendant", group_is_available },
      { Group_Root, Group_Axis, "Axis", group_is_available },
      { Group_Axis, Group_XAxis, "X-axis", group_is_available },
      { Group_Axis, Group_YAxis, "Y-axis", group_is_available },
@@ -1260,6 +1276,16 @@ static status_code_t set_rotary_options (setting_id_t id, uint_fast16_t int_valu
 }
 #endif
 
+static status_code_t mpg_set_baud (setting_id_t id, uint_fast16_t int_value)
+{
+    status_code_t status;
+
+    if((status = stream_mpg_set_baud((uint8_t)int_value) ? Status_OK : Status_SettingValueOutOfRange) == Status_OK)
+        settings.mpg_baud_rate = (uint8_t)int_value;
+
+    return status;
+}
+
 static status_code_t set_sleep_enable (setting_id_t id, uint_fast16_t int_value)
 {
     settings.flags.sleep_enable = int_value != 0;
@@ -1466,10 +1492,6 @@ inline static setting_id_t normalize_id (setting_id_t id)
         (id > Setting_AxisSettingsBase1 && id <= Setting_AxisSettingsMax1) ||
          (id > Setting_AxisSettingsBase2 && id <= Setting_AxisSettingsMax2))
         id -= id % AXIS_SETTINGS_INCREMENT;
-    else if(id > Setting_EncoderSettingsBase && id <= Setting_EncoderSettingsMax)
-        id = (setting_id_t)(Setting_EncoderSettingsBase + (id % ENCODER_SETTINGS_INCREMENT));
-    else if(id > Setting_ModbusTCPBase && id <= Setting_ModbusTCPMax)
-        id = (setting_id_t)(Setting_ModbusTCPBase + (id % MODBUS_TCP_SETTINGS_INCREMENT));
 
     return id;
 }
@@ -1897,6 +1919,10 @@ FLASHMEM static uint32_t get_int (setting_id_t id)
             value = settings.flags.rotary_fix_enable | (settings.flags.revert_metric_conversion << 1);
             break;
 #endif
+        case Settings_MPG_BaudRate:
+            value = settings.mpg_baud_rate;
+            break;
+
         default:
             break;
     }
@@ -2249,6 +2275,10 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
             available = hal.motor_fault_cap.a.mask != 0;
             break;
 
+        case Settings_MPG_BaudRate:
+            available = hal.driver_cap.mpg_mode;
+            break;
+
         default:
             break;
     }
@@ -2521,6 +2551,7 @@ PROGMEM static const setting_detail_t setting_detail[] = {
 #if N_AXIS > 3
      { Setting_RotaryOptions, Group_General, "Rotary options", NULL, Format_XBitfield, "Fix feedrate,Revert metric conversion", NULL, NULL, Setting_IsExpandedFn, set_rotary_options, get_int, NULL },
 #endif
+     { Settings_MPG_BaudRate, Group_MPG, "MPG baud rate", NULL, Format_RadioButtons, "38400,115200,230400,460800,576000,921600", NULL, NULL, Setting_NonCoreFn, mpg_set_baud, get_int, is_setting_available },
 };
 
 PROGMEM static const setting_descr_t setting_descr[] = {
@@ -3121,36 +3152,7 @@ FLASHMEM setting_group_t settings_normalize_group (setting_group_t group)
     return (group > Group_Axis0 && group < Group_Axis0 + N_AXIS) ? Group_Axis0 : group;
 }
 
-FLASHMEM bool settings_iterator (const setting_detail_t *setting, setting_output_ptr callback, void *data)
-{
-    bool ok = false;
-
-    if(setting->group == Group_Axis0) {
-
-        uint_fast8_t axis_idx = 0;
-
-        for(axis_idx = 0; axis_idx < system_n_axis(); axis_idx++) {
-
-            if(setting->is_available == NULL || setting->is_available(setting, axis_idx)) {
-
-                if(grbl.on_set_axis_setting_unit)
-                    set_axis_unit(setting, grbl.on_set_axis_setting_unit(setting->id, axis_idx));
-
-                if(!(ok = callback(setting, axis_idx, data)))
-                    break;
-            }
-        }
-    } else if(setting->flags.increment) {
-        setting_details_t *set;
-        if((setting = setting_get_details(setting->id, &set)) && set && set->iterator)
-            ok = set->iterator(setting, callback, data);
-    } else
-        ok = callback(setting, 0, data);
-
-    return ok;
-}
-
-static inline const setting_detail_t *_setting_get_details (setting_id_t id, uint_fast16_t offset, setting_details_t **set)
+static inline const setting_detail_t *__setting_get_details (setting_id_t id, uint_fast16_t offset, bool check_available, setting_details_t **set)
 {
     uint_fast16_t idx;
     setting_details_t *details = settings_get_details();
@@ -3162,13 +3164,10 @@ static inline const setting_detail_t *_setting_get_details (setting_id_t id, uin
 
     do {
         for(idx = 0; idx < details->n_settings; idx++) {
-            if(details->settings[idx].id == id && is_available(&details->settings[idx], offset)) {
+            if(details->settings[idx].id == id && (!check_available || is_available(&details->settings[idx], offset))) {
 
                 if(details->settings[idx].group == Group_Axis0 && grbl.on_set_axis_setting_unit)
                     set_axis_unit(&details->settings[idx], grbl.on_set_axis_setting_unit(details->settings[idx].id, offset));
-
-                if(offset && details->iterator == NULL && offset >= (details->settings[idx].group == Group_Encoder0 ? encoders_get_count() : N_AXIS))
-                    return NULL;
 
                 if(set)
                     *set = details;
@@ -3181,30 +3180,30 @@ static inline const setting_detail_t *_setting_get_details (setting_id_t id, uin
     return NULL;
 }
 
-FLASHMEM const setting_detail_t *setting_get_details (setting_id_t id, setting_details_t **set)
+FLASHMEM const setting_detail_t *_setting_get_details (setting_id_t id, bool check_available, setting_details_t **set)
 {
     const setting_detail_t *detail;
 
-    if((detail = _setting_get_details(id, id - normalize_id(id), set)) == NULL) {
+    if((detail = __setting_get_details(id, id - normalize_id(id), check_available, set)) == NULL) {
 
         uint_fast16_t idx, offset;
+        setting_id_t base_id;
         setting_details_t *details = settings_get_details();
 
         do {
-            if(details->normalize && (offset = id - details->normalize(id))) {
+            if(details->normalize && (base_id = details->normalize(id))) {
 
+                offset = id - base_id;
                 id -= offset;
 
                 for(idx = 0; idx < details->n_settings; idx++) {
-                    if(details->settings[idx].id == id && is_available(&details->settings[idx], offset)) {
-
-                        detail =  &details->settings[idx];
-
+                    if(details->settings[idx].id == id && (!check_available || is_available(&details->settings[idx], offset))) {
+                        detail = &details->settings[idx];
                         if(set)
                             *set = details;
+                        break;
                     }
                 }
-                break;
             }
         } while((details = details->next));
     }
@@ -3212,15 +3211,52 @@ FLASHMEM const setting_detail_t *setting_get_details (setting_id_t id, setting_d
     return detail;
 }
 
+FLASHMEM bool settings_iterator (const setting_detail_t *setting, setting_output_ptr callback, void *data)
+{
+    bool ok = false;
+
+    if(setting->group == Group_Axis0) {
+
+        uint_fast8_t axis_idx = 0;
+
+        for(axis_idx = 0; axis_idx < system_n_axis(); axis_idx++) {
+
+            if(is_available(setting, axis_idx)) {
+
+                if(grbl.on_set_axis_setting_unit)
+                    set_axis_unit(setting, grbl.on_set_axis_setting_unit(setting->id, axis_idx));
+
+                if(!(ok = callback(setting, axis_idx, data)))
+                    break;
+            }
+        }
+    } else if(setting->flags.increment) {
+        setting_details_t *set;
+        if((setting = _setting_get_details(setting->id, false, &set)) && set && set->iterator)
+            ok = set->iterator(setting, callback, data);
+    } else
+        ok = callback(setting, 0, data);
+
+    return ok;
+}
+
+FLASHMEM const setting_detail_t *setting_get_details (setting_id_t id, setting_details_t **set)
+{
+    return _setting_get_details(id, true, set);
+}
+
 FLASHMEM const char *setting_get_description (setting_id_t id)
 {
-    const char *description = NULL;
+    static char *buf = NULL;
+    static size_t buflen = 0;
+
+    const char *description = NULL, *s;
 
     if(grbl.on_setting_get_description == NULL || (description = grbl.on_setting_get_description(id)) == NULL) {
 
         uint_fast16_t idx;
-        setting_details_t *settings = settings_get_details();
-        const setting_detail_t *setting = setting_get_details(id, NULL);
+        setting_details_t *settings;
+        const setting_detail_t *setting = setting_get_details(id, &settings);
 
         if(setting) do {
             if(settings->descriptions) {
@@ -3231,7 +3267,20 @@ FLASHMEM const char *setting_get_description (setting_id_t id)
                         if(setting->id == Setting_AxisStepsPerMM && axis_is_rotary(id - setting->id))
                             idx++;
   #endif
-                        description = settings->descriptions[idx].description;
+                        if((description = settings->descriptions[idx].description) && setting->flags.increment && (s = strchr(description, '?'))) {
+
+                            const char *v = uitoa((id - setting->id) / (setting->flags.subgroups ? setting->flags.increment : 1) + 1);
+                            size_t len = strlen(description) + strlen(v) + 1;
+
+                            if(len < buflen || (buf = realloc(buf, (buflen = len)))) {
+                                *buf = '\0';
+                                if(description != s)
+                                    strlcpy(buf, description, s - description + 1);
+                                strcat(buf, v);
+                                strcat(buf, s + 1);
+                                description = buf;
+                            }
+                        }
                     }
                 } while(idx && description == NULL);
             }
@@ -3839,10 +3888,15 @@ FLASHMEM void settings_init (void)
             }
         }
 
+        if(settings.version.build <= 260903)
+            settings.mpg_baud_rate = DEFAULT_MPG_BAUD;
+
         settings.version.build = (GRBL_BUILD - 20000000UL);
 
         global_settings.save();
     }
+
+    stream_mpg_set_baud(settings.mpg_baud_rate);
 
     global_settings.on_changed = grbl.on_settings_changed;
 
