@@ -444,7 +444,7 @@ FLASHMEM static bool stream_select (const io_stream_t *stream, bool add)
         hal.stream.disable_rx(false);
 
     if(grbl.on_stream_changed)
-        grbl.on_stream_changed();
+        grbl.on_stream_changed(hal.stream.type);
 
     active_stream = stream;
 

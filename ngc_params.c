@@ -526,9 +526,7 @@ FLASHMEM float ngc_named_param_get_by_id (ncg_name_param_id_t id)
             value = 400.0f;
 #endif
             break;
-#else
-            value = 400.0f;
-#endif  
+
         case NGCParam_metric:
             value = gc_state.modal.units_imperial ? 0.0f : 1.0f;
             break;

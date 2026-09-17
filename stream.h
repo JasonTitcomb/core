@@ -84,6 +84,9 @@ typedef enum {
     StreamType_Bluetooth,
     StreamType_Telnet,
     StreamType_WebSocket,
+    StreamType_MPG,
+    StreamType_File,
+    StreamType_SDCard,
     StreamType_Null
 } stream_type_t;
 

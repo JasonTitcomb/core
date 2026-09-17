@@ -2915,11 +2915,7 @@ status_code_t gc_execute_block (char *block)
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
     //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. grblHAL supports G40
     //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
-#if CUTTER_COMP_ENABLE                
-    // [13. Cutter radius compensation ]: G41/42 SUPPORTED XY ONLY.
-
 #if CUTTER_COMP_ENABLE
-
     // [13. Cutter radius compensation ]: G41/42 SUPPORTED XY ONLY.
 
     // A standalone G40 is modal-only. Drain queued compensation only when the block also carries motion.
