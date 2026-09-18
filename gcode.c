@@ -30,12 +30,12 @@
 #include "protocol.h"
 #include "state_machine.h"
 
-#if NGC_PARAMETERS_ENABLE
-#include "ngc_params.h"
+#if CUTTER_COMP_ENABLE  
+#include "cutter_comp/cutter_comp_grblhal.c"
 #endif
 
-#if CUTTER_COMP_ENABLE  
-#include "cutter_comp_grblhal.h"
+#if NGC_PARAMETERS_ENABLE
+#include "ngc_params.h"
 #endif
 
 #if NGC_EXPRESSIONS_ENABLE
@@ -123,18 +123,18 @@ static scale_factor_t scale_factor = {
 #endif
 };
 
-#if CUTTER_COMP_ENABLE
+// #if CUTTER_COMP_ENABLE
+// Needed to rem this or it would not compile for me. Not sure.JPT
+// FLASHMEM __attribute__((weak)) void cc_init (void)
+// {
+// }
 
-FLASHMEM __attribute__((weak)) void cc_init (void)
-{
-}
+// FLASHMEM __attribute__((weak)) bool cc_enable (gc_ccomp_t *comp_data, plane_t plane, coord_data_t *position)
+// {
+//     return comp_data->side == CComp_Off;
+// }
 
-FLASHMEM __attribute__((weak)) bool cc_enable (gc_ccomp_t *comp_data, plane_t plane, coord_data_t *position)
-{
-    return comp_data->side == CComp_Off;
-}
-
-#endif
+// #endif
 
 // Simple hypotenuse computation function.
 inline static float hypot_f (float x, float y)
@@ -601,16 +601,16 @@ FLASHMEM static modal_restore_actions_t *get_state_restore_commands (gc_modal_t 
 }
 
 #if CUTTER_COMP_ENABLE
-FLASHMEM static inline comp_side cutter_comp_side_to_core (ccomp_mode_t side)
-{
-    return side == CComp_Left ? CC_COMP_LEFT : (side == CComp_Right ? CC_COMP_RIGHT : CC_COMP_OFF);
-}
+// FLASHMEM static inline comp_side cutter_comp_side_to_core (ccomp_mode_t side)
+// {
+//     return side == CComp_Left ? CC_COMP_LEFT : (side == CComp_Right ? CC_COMP_RIGHT : CC_COMP_OFF);
+// }
 
-FLASHMEM static inline void cutter_comp_apply_settings (void)
-{
-    cc_api_set_lookahead_enabled(settings.cutter_comp_flags.allow_lookahead);
-    cc_api_set_corner_treatment_mode(settings.cutter_comp_flags.chamfer_corner_treatment ? CC_CTM_CHAMFER : CC_CTM_ROLL);
-}
+// FLASHMEM static inline void cutter_comp_apply_settings (void)
+// {
+//     cc_api_set_lookahead_enabled(settings.cutter_comp_flags.allow_lookahead);
+//     cc_api_set_corner_treatment_mode(settings.cutter_comp_flags.chamfer_corner_treatment ? CC_CTM_CHAMFER : CC_CTM_ROLL);
+// }
 FLASHMEM static void cutter_comp_save_state (void)
 {
     report_message("cutter_comp_save_state", Message_Plain);

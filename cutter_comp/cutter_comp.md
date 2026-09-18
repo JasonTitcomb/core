@@ -6,8 +6,8 @@ This tree contains the cutter compensation core and the grblHAL shim that is alr
 
 - `cutter_comp.c` and `cutter_comp.h`
   - Core 2D compensation engine, move buffering, and junction handling.
-- `cutter_comp_grblhal.h`
-  - grblHAL adapter that converts planner moves into `move2d`, feeds them into the core, and emits compensated moves back through `mc_line()` and `mc_arc()`.
+- `cutter_comp_grblhal.c`
+  - grblHAL adapter that converts planner moves into `move2d`, feeds them into the core, and emits compensated moves back through the saved core `mc_line()` and `mc_arc()` callbacks.
 - `gcode.c`
   - Parser/runtime integration for `G40`, `G41`, `G42`, `G41.1`, and `G42.1`.
 - `config.h`
@@ -25,6 +25,8 @@ This repository does not include `grbl_data_portable.h` or `LOOKAHEAD_PROFILES.m
 - Linear moves, rapids, and XY arcs are routed through the shim when compensation is active.
 - `G40`, `G41`, `G42`, `G41.1`, and `G42.1` are parsed.
 - The core reports runtime issues such as invalid moves, inconsistent arc radii, and unresolved gaps.
+- Corner treatment defaults to roll or chamfer according to the cutter-compensation setting; `P1` on a `G41` or `G42` entry block selects the command-level corner treatment override.
+- Rapids are preserved when compensated moves are emitted, and Z-only moves are buffered so consecutive Z-only moves can be combined.
 
 ## Runtime flow
 
@@ -36,6 +38,8 @@ When `CUTTER_COMP_ENABLE` is enabled, the flow is:
 4. Motion is sent through `cc_mc_line_in()` or `cc_mc_arc_in()`.
 5. The shim emits compensated geometry back through `mc_line()` and `mc_arc()`.
 6. When compensation is turned off, pending moves are flushed with `cc_api_process_move(0)` and the mode is set back to `CC_COMP_OFF`.
+
+The bridge also integrates `G4` dwell commands and `M0`, `M1`, and `M60` program pauses while compensation is active. These are queued as markers and applied after the appropriate compensated output motion. Modal compensation state is saved, invalidated, and restored for the supported `M70`, `M71`, `M72`, and `M73` flows.
 
 Global look-ahead, also referred to here as gouge checking, is available again with cutter compensation enabled. In check mode the parser still routes compensated line and arc blocks through the cutter compensation path so entry conditions and geometry can be validated across the program before running it.
 
@@ -49,7 +53,7 @@ One purpose of this pass is to catch compensated paths that would cut back into 
 - Z-only moves are allowed. Consecutive Z-only moves are combined to a single move using the last feedrate.(edge case)
 - Rapids are allowed while compensation is active. In the core they are treated as line-like moves for validation and junction handling, while still being emitted back out with the rapid flag preserved.
 - If a line-line junction involves a rapid, no roll-around transition is inserted at that junction. The core falls back to trim, extend, or bevel handling instead of generating a roll move.
-- The meaning of single block means single move when in cutter comp mode. Convex corner treatments become individual moves.
+- Single-block behavior remains line-oriented at the parser level. The bridge does not pause on every internally generated corner or roll move. When single block is enabled during an active cycle, a pause is requested immediately when possible; if compensated output is already being generated, the pause is deferred until the next emitted compensated motion. A `G40` cancellation flushes its final compensated output before applying the pause.
 
 ## Radius resolution
 
@@ -96,10 +100,10 @@ In addition to these parser-level restrictions, the compensation core can still 
 
 ## Persistent settings
 
-- `$1000` is the boolean setting for the default cutter comp corner mode.
-- When `$1000=1`, chamfer corner treatment is the default on `G41` or `G42` entry. When `$1000=0`, roll mode is the default.
-- `$1001` is the boolean setting for cutter comp look-ahead when that support is compiled in.
-- These defaults are reapplied each time the cutter compensation core is initialized.
+- `$702` is the cutter compensation options setting.
+- When built with `CUTTER_COMP_ENABLE=1`, bit 0 selects the default corner treatment: `0` is roll and `1` is chamfer.
+- When built with `CUTTER_COMP_ENABLE=2`, bit 0 selects the default corner treatment and bit 1 enables the look-ahead/gouge-checking pass.
+- These options are reapplied each time the cutter compensation core is initialized.
 
 
 ## User-visible messages and state
@@ -107,6 +111,7 @@ In addition to these parser-level restrictions, the compensation core can still 
 - On entry through the line shim, an informational message of the form `CC_On R=... Corner=...` is reported.
 - Turning compensation off reports `CC_Off` when cancellation is handled through the line shim path.
 - When gouge checking trims away a would-be overcut because of a global self-intersection, an informational message `Global self intersection detected` is reported. If the originating line number is available, the shim formats it as `CC:Global self intersection detected at line N`.
+- Deferred compensation pauses report `CC: Pausing after move`; deferred dwells report `CC: Dwell...`.
 - Modal reporting exposes active compensation as `G41` or `G42`.
 - Exposure in `ngc_params.c` differentiates `G40`, `G41`, `G42`, `G41.1`, and `G42.1`.
 
@@ -114,7 +119,7 @@ In addition to these parser-level restrictions, the compensation core can still 
 
 - Verify `CUTTER_COMP_ENABLE` evaluates true in `config.h` for the build you are using.
 - `CC_ENABLE_LOOKAHEAD` is selected in `cutter_comp.h` from `CUTTER_COMP_ENABLE` mode: `2` enables look-ahead support, while `1` builds without look-ahead.
-- Runtime look-ahead toggling (`$1001`) is available only when built with `CUTTER_COMP_ENABLE=2`.
+- Runtime look-ahead toggling is available through bit 1 of `$702` only when built with `CUTTER_COMP_ENABLE=2`.
 - If your cutter compensation use case is only a very small diameter wear offset, global look-ahead is often not necessary and may be left disabled.
 - If you use global look-ahead / gouge checking, cutter compensation blocks are validated in that pass as well. Check mode suppresses normal runtime side effects such as emitted messages, so use a real run if you need to inspect the `CC_On` / `CC_Off` reporting path.
 - If compensated motion is not emitted, check that the build is using the `gcode.c` paths that call `cc_mc_line_in()` and `cc_mc_arc_in()`.

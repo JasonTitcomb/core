@@ -199,7 +199,7 @@ typedef struct
 vec2 cc_v2(float x, float y);
 
 typedef void (*cc_msg_cb)( cc_status_code_t msg, msg_type_t severity, uint32_t lineNum);
-typedef void (*emit_move_cb)(const move2d *move);
+typedef bool (*emit_move_cb)(const move2d *move);
 
 typedef struct
 {
@@ -249,6 +249,7 @@ void cc_api_init(float radius, cc_units units, emit_move_cb emitCb, cc_msg_cb er
 // Returns CC_OK if the move was processed and emitted successfully, or if flushing completed successfully.
 // Returns an appropriate error code otherwise.
 cc_status_code_t cc_api_process_move(const move2d *move);
+void cc_api_drain_output(void);
 
 // comp_side is CC_COMP_OFF=0, CC_COMP_LEFT=1, or CC_COMP_RIGHT=-1
 void cc_api_set_comp(comp_side side);

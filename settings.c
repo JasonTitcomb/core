@@ -36,7 +36,7 @@
 #include "state_machine.h"
 #include "strutils.h"
 #if CUTTER_COMP_ENABLE
-#include "cutter_comp.h"
+#include "cutter_comp/cutter_comp.h"
 #endif
 #if ENABLE_BACKLASH_COMPENSATION
 #include "motion_control.h"

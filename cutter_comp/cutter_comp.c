@@ -2304,7 +2304,8 @@ static inline void cc_core_drain(void)
     {
         if (!out.valid)
             continue;
-        g_core_emit_cb(&out);
+        if (!g_core_emit_cb(&out))
+            return;
     }
 }
 
@@ -2406,5 +2407,10 @@ cc_status_code_t cc_api_process_move(const move2d *move)
 
     cc_core_drain();
     return cc_status_OK;
+}
+
+void cc_api_drain_output(void)
+{
+    cc_core_drain();
 }
 #endif
