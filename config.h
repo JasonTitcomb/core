@@ -222,7 +222,7 @@ or EMI triggering the related interrupt falsely or too many times.
 #endif
 
 #if !defined CUTTER_COMP_ENABLE || defined __DOXYGEN__
-#define CUTTER_COMP_ENABLE On
+#define CUTTER_COMP_ENABLE 2
 #endif
 
 // -

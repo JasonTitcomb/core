@@ -2,6 +2,20 @@
 
 This tree contains the cutter compensation core and the grblHAL shim that is already wired into the local parser and motion path.
 
+Version: `0.2`
+
+## Changelog
+
+### 0.2
+
+- Added cutter-compensation option handling through `$702`.
+- With `CUTTER_COMP_ENABLE=2`, `$702` bit 0 selects roll or chamfer corners and bit 1 enables or disables the compiled look-ahead pass.
+- With `CUTTER_COMP_ENABLE=1`, `$702` controls only the corner treatment.
+
+### 0.1
+
+- Initial cutter compensation core and grblHAL integration.
+
 ## Files in this tree
 
 - `cutter_comp.c` and `cutter_comp.h`
@@ -20,7 +34,7 @@ This repository does not include `grbl_data_portable.h` or `LOOKAHEAD_PROFILES.m
 ## What is implemented here
 
 - `CUTTER_COMP_ENABLE` gates the feature at compile time.
-- `CC_ENABLE_LOOKAHEAD` gates the cutter compensation global look-ahead pass (gouge checking) at compile time.
+- `CUTTER_COMP_ENABLE=2` compiles the cutter compensation look-ahead pass (gouge checking); `CUTTER_COMP_ENABLE=1` omits it.
 - XY plane only. Entering compensation outside `G17` returns `Status_GcodeIllegalPlane`.
 - Linear moves, rapids, and XY arcs are routed through the shim when compensation is active.
 - `G40`, `G41`, `G42`, `G41.1`, and `G42.1` are parsed.
@@ -86,6 +100,7 @@ The parser rejects cutter compensation, or rejects the current block while compe
 
 - Entering compensation outside `G17` is not allowed. `G41`, `G42`, `G41.1`, and `G42.1` require the XY plane.
 - Re-entering or switching compensation while it is already active is not allowed. Cancel first with `G40`.
+- `M2` and `M30` are not allowed while compensation is active; cancel with `G40` before ending the program.
 - Tool change commands are not allowed while compensation is active.
 - `G50` and `G51` scaling changes are not allowed while compensation remains active through the block. A combined `G40 G50` block is still allowed because compensation is being canceled in that same block.
 - Coordinate system selection changes such as `G54` through `G59.x` are not allowed while compensation is active.
@@ -102,7 +117,8 @@ In addition to these parser-level restrictions, the compensation core can still 
 
 - `$702` is the cutter compensation options setting.
 - When built with `CUTTER_COMP_ENABLE=1`, bit 0 selects the default corner treatment: `0` is roll and `1` is chamfer.
-- When built with `CUTTER_COMP_ENABLE=2`, bit 0 selects the default corner treatment and bit 1 enables the look-ahead/gouge-checking pass.
+- When built with `CUTTER_COMP_ENABLE=2`, bit 0 selects the default corner treatment and bit 1 selects whether the compiled look-ahead/gouge-checking pass is used: `0` is disabled and `1` is enabled.
+- With `CUTTER_COMP_ENABLE=2`, `$702=0` is roll without lookahead, `$702=1` is chamfer without lookahead, `$702=2` is roll with lookahead, and `$702=3` is chamfer with lookahead.
 - These options are reapplied each time the cutter compensation core is initialized.
 
 
@@ -118,8 +134,8 @@ In addition to these parser-level restrictions, the compensation core can still 
 ## Enabling and troubleshooting
 
 - Verify `CUTTER_COMP_ENABLE` evaluates true in `config.h` for the build you are using.
-- `CC_ENABLE_LOOKAHEAD` is selected in `cutter_comp.h` from `CUTTER_COMP_ENABLE` mode: `2` enables look-ahead support, while `1` builds without look-ahead.
-- Runtime look-ahead toggling is available through bit 1 of `$702` only when built with `CUTTER_COMP_ENABLE=2`.
+- `CC_ENABLE_LOOKAHEAD` is selected in `cutter_comp.h` from `CUTTER_COMP_ENABLE`: `2` enables compiled look-ahead support, while `1` builds without it.
+- `$702` bit 1 controls runtime look-ahead use only when built with `CUTTER_COMP_ENABLE=2`; it has no look-ahead meaning in mode `1`.
 - If your cutter compensation use case is only a very small diameter wear offset, global look-ahead is often not necessary and may be left disabled.
 - If you use global look-ahead / gouge checking, cutter compensation blocks are validated in that pass as well. Check mode suppresses normal runtime side effects such as emitted messages, so use a real run if you need to inspect the `CC_On` / `CC_Off` reporting path.
 - If compensated motion is not emitted, check that the build is using the `gcode.c` paths that call `cc_mc_line_in()` and `cc_mc_arc_in()`.
@@ -127,4 +143,3 @@ In addition to these parser-level restrictions, the compensation core can still 
 - If static compensation does not engage, verify the selected tool table entry has a non-zero radius.
 - If dynamic compensation does not engage, verify `G41.1` or `G42.1` includes a `D` word.
 - If `CUTTER_COMP_ENABLE` then when using G10 L1 P[toolnum] R, the R value will honor the current units the same as axis values. 
-

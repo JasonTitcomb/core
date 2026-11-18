@@ -30,10 +30,6 @@
 #include "protocol.h"
 #include "state_machine.h"
 
-#if CUTTER_COMP_ENABLE  
-#include "cutter_comp/cutter_comp_grblhal.c"
-#endif
-
 #if NGC_PARAMETERS_ENABLE
 #include "ngc_params.h"
 #endif
@@ -123,18 +119,18 @@ static scale_factor_t scale_factor = {
 #endif
 };
 
-// #if CUTTER_COMP_ENABLE
-// Needed to rem this or it would not compile for me. Not sure.JPT
-// FLASHMEM __attribute__((weak)) void cc_init (void)
-// {
-// }
+#if CUTTER_COMP_ENABLE
 
-// FLASHMEM __attribute__((weak)) bool cc_enable (gc_ccomp_t *comp_data, plane_t plane, coord_data_t *position)
-// {
-//     return comp_data->side == CComp_Off;
-// }
+FLASHMEM __attribute__((weak)) void cc_init (void)
+{
+}
 
-// #endif
+FLASHMEM __attribute__((weak)) bool cc_enable (gc_ccomp_t *comp_data, plane_t plane, coord_data_t *position)
+{
+    return comp_data->side == CComp_Off;
+}
+
+#endif
 
 // Simple hypotenuse computation function.
 inline static float hypot_f (float x, float y)
@@ -538,12 +534,7 @@ FLASHMEM static modal_restore_actions_t *get_state_restore_commands (gc_modal_t 
         if((actions.command.G6 = modal->units_imperial != snapshot->modal.units_imperial))
             modal->units_imperial = snapshot->modal.units_imperial;
 
-        // G7: G40,G41,G41.1,G42,G42.1
-#if CUTTER_COMP_ENABLE
-        if((actions.command.G7 = modal->cutter_comp.side != snapshot->modal.cutter_comp.side ||
-                                 modal->cutter_comp.radius != snapshot->modal.cutter_comp.radius))
-            modal->cutter_comp = snapshot->modal.cutter_comp;
-#endif
+        // G7 not supported: G40,G41,G41.1,G42,G42.1
 
 #if CUTTER_COMP_ENABLE
         // G7: G40,G41,G41.1,G42,G42.1
@@ -600,37 +591,6 @@ FLASHMEM static modal_restore_actions_t *get_state_restore_commands (gc_modal_t 
     return &actions;
 }
 
-#if CUTTER_COMP_ENABLE
-// FLASHMEM static inline comp_side cutter_comp_side_to_core (ccomp_mode_t side)
-// {
-//     return side == CComp_Left ? CC_COMP_LEFT : (side == CComp_Right ? CC_COMP_RIGHT : CC_COMP_OFF);
-// }
-
-// FLASHMEM static inline void cutter_comp_apply_settings (void)
-// {
-//     cc_api_set_lookahead_enabled(settings.cutter_comp_flags.allow_lookahead);
-//     cc_api_set_corner_treatment_mode(settings.cutter_comp_flags.chamfer_corner_treatment ? CC_CTM_CHAMFER : CC_CTM_ROLL);
-// }
-FLASHMEM static void cutter_comp_save_state (void)
-{
-    report_message("cutter_comp_save_state", Message_Plain);
-    cc_mc_save_modal_state();
-}
-FLASHMEM static void cutter_comp_invalidate_state (void)
-{
-    cc_mc_invalidate_modal_state();
-    report_message("cutter_comp_invalidate_state", Message_Plain);
-}
-FLASHMEM static void cutter_comp_restore_state (const gc_ccomp_t *cutter_comp)
-{
-    report_message("cutter_comp_restore_state", Message_Plain);
-    gc_state.modal.cutter_comp = *cutter_comp;
-    //The state of the comp engine should now be the same as it was.
-    cc_mc_restore_modal_state();
-}
-
-#endif
-
 FLASHMEM bool gc_modal_state_restore (gc_modal_snapshot_t *snapshot)
 {
     bool ok = false;
@@ -664,11 +624,6 @@ FLASHMEM bool gc_modal_state_restore (gc_modal_snapshot_t *snapshot)
 
         if(actions->command.G15)
             report_add_realtime(Report_LatheXMode);
-
-#if CUTTER_COMP_ENABLE
-        if(actions->command.G7)//M73 save-with-auto-restore behavior 
-            cutter_comp_restore_state(&snapshot->modal.cutter_comp);
-#endif
 
         for(idx = 0; idx < N_SYS_SPINDLE; idx++) {
             if(actions->update_spindle[idx]) {
@@ -892,12 +847,6 @@ FLASHMEM void gc_init (bool stop)
 #endif
 #if NGC_PARAMETERS_ENABLE
     ngc_params_init();
-#endif
-#if CUTTER_COMP_ENABLE
-    cc_api_init(0.0f, gc_state.modal.units_imperial ? CC_UNITS_INCH : CC_UNITS_MM, cc_emit_via_mc, cc_message); // Reset cutter comp engine state on init/stop
-    cutter_comp_apply_settings();
-    cc_mc_reset_runtime_state(gc_state.position);
-    cc_mc_install_control_hook();
 #endif
 #if ENABLE_ACCELERATION_PROFILES
     gc_state.modal.acceleration_factor = gc_get_accel_factor(0); // Initialize machine with default
@@ -1307,7 +1256,6 @@ status_code_t gc_execute_block (char *block)
 
     char *message = NULL;
     status_code_t status = Status_OK;
-    bool check_mode = state_get() == STATE_CHECK_MODE;
     struct {
         float f;
         uint32_t o;
@@ -1423,7 +1371,7 @@ status_code_t gc_execute_block (char *block)
 
         if(letter == '#') {
 
-            if(gc_state.skip_blocks)
+            if(skip_blocks)
                 return Status_OK;
 
             if(block[char_counter] == '<') {
@@ -1503,7 +1451,7 @@ status_code_t gc_execute_block (char *block)
         else if((status = ngc_read_real_value(block, &char_counter, &value)) != Status_OK)
             RETURN(status);
 
-        if(gc_state.skip_blocks && letter != 'O')
+        if(skip_blocks && letter != 'O')
             return Status_OK;
 
         if(user_mcode != UserMCode_NoValueWords && isnan(value))
@@ -1668,10 +1616,6 @@ status_code_t gc_execute_block (char *block)
                     case 17: case 18: case 19:
                         word_bit.modal_group.G2 = On;
                         gc_block.modal.plane_select = (plane_select_t)(int_value - 17);
-#if CUTTER_COMP_ENABLE
-                        if(gc_block.modal.plane_select != PlaneSelect_XY && gc_block.modal.cutter_comp.side != CComp_Off)
-                            RETURN(Status_CutterCompConflict);
-#endif                        
                         break;
 
                     case 90: case 91:
@@ -2295,8 +2239,11 @@ status_code_t gc_execute_block (char *block)
 
     if(command_words.G16) {
 
-        if(gc_block.macro_call && gc_state.g66_args == NULL) {
-
+        if(gc_block.macro_call
+#if NGC_PARAMETERS_ENABLE
+            && gc_state.g66_args == NULL
+#endif
+        ) {
             if(!gc_block.words.p)
                 RETURN(Status_GcodeValueWordMissing); // [P word missing]
             if(gc_block.values.p > 65535.0f)
@@ -2344,12 +2291,13 @@ status_code_t gc_execute_block (char *block)
                     RETURN(Status_FlowControlStackOverflow);
                 // MacroCall_Modal is not invoked on initially, MacroCall_Modal1 is.
                 if(gc_block.macro_call == MacroCall_Modal)
-                    RETURN(Status_OK);
+                    return Status_OK;
             }
         }
 #endif // NGC_PARAMETERS_ENABLE
     } else
         gc_block.words.m = Off;
+
     // Determine implicit axis command conditions. Axis words have been passed, but no explicit axis
     // command has been sent. If so, set axis command to current motion mode.
     if (axis_words.mask && !axis_command)
@@ -2675,11 +2623,6 @@ status_code_t gc_execute_block (char *block)
 #endif
     }
 
-#if CUTTER_COMP_ENABLE
-    if(command_words.M6 && gc_block.tool_action == ToolAction_Change && gc_state.modal.cutter_comp.side != CComp_Off)
-        RETURN(Status_CutterCompConflict);
-#endif
-
     // [7. Spindle control ]:
     if(command_words.M7) {
         if(gc_block.spindle_modal.state.ccw) {
@@ -2812,11 +2755,6 @@ status_code_t gc_execute_block (char *block)
     if(gc_block.modal.diameter_mode && bit_istrue(axis_words.mask, bit(X_AXIS)))
         gc_block.values.xyz[X_AXIS] /= 2.0f;
 
-#if CUTTER_COMP_ENABLE
-    if(axis_command == AxisCommand_Scaling && gc_state.modal.cutter_comp.side != CComp_Off && gc_block.modal.cutter_comp.side != CComp_Off)
-        RETURN(Status_CutterCompConflict);
-#endif
-
     // Scale axis words if commanded
     if(axis_command == AxisCommand_Scaling) {
 
@@ -2915,7 +2853,9 @@ status_code_t gc_execute_block (char *block)
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
     //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. grblHAL supports G40
     //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
+
 #if CUTTER_COMP_ENABLE
+
     // [13. Cutter radius compensation ]: G41/42 SUPPORTED XY ONLY.
 
     // A standalone G40 is modal-only. Drain queued compensation only when the block also carries motion.
@@ -3106,11 +3046,6 @@ status_code_t gc_execute_block (char *block)
 #endif
                 p_value = (uint8_t)truncf(gc_block.values.p); // Convert p value to int.
             }
-
-#if CUTTER_COMP_ENABLE
-            if(gc_block.modal.cutter_comp.side != CComp_Off)
-                RETURN(Status_CutterCompConflict);
-#endif
 
             switch(gc_block.values.l) {
 
@@ -3549,10 +3484,6 @@ status_code_t gc_execute_block (char *block)
                 RETURN(Status_GcodeUndefinedFeedRate); // [Feed rate undefined]
 
             if(gc_block.modal.canned_cycle_active) {
-#if CUTTER_COMP_ENABLE
-                if(gc_block.modal.cutter_comp.side != CComp_Off)
-                    RETURN(Status_CutterCompConflict);
-#endif
 
                 if(gc_parser_flags.canned_cycle_change) {
 #if CUTTER_COMP_ENABLE
@@ -4093,6 +4024,8 @@ status_code_t gc_execute_block (char *block)
         RETURN((status_code_t)int_value);
     }
 
+    bool check_mode = state_get() == STATE_CHECK_MODE;
+
     if(command_words.G16) switch(gc_block.macro_call) {
 
         case MacroCall_NonModal:
@@ -4388,15 +4321,10 @@ status_code_t gc_execute_block (char *block)
 
             if(!ngc_modal_state_save(&gc_state.modal, &override, gc_state.feed_rate, gc_block.state_action == ModalState_SaveAutoRestore))
                 RETURN(Status_FlowControlOutOfMemory); // [Out of memory] TODO: allocate memory during validation? Static allocation?
-#if CUTTER_COMP_ENABLE                    
-            cutter_comp_save_state();//M70, M73
-#endif
             break;
+
         case ModalState_Invalidate:
             ngc_modal_state_invalidate();
-#if CUTTER_COMP_ENABLE                    
-            cutter_comp_invalidate_state();//M71
-#endif
             break;
 
         case ModalState_Restore:;
@@ -4410,13 +4338,6 @@ status_code_t gc_execute_block (char *block)
 
                 if(actions->command.G5)
                     gc_state.modal.feed_mode = gc_block.modal.feed_mode;
-
-#if CUTTER_COMP_ENABLE                    
-                if (actions->command.G7) { //triggered by M72
-                    actions->command.G7 = Off;
-                    cutter_comp_restore_state(&snapshot->modal.cutter_comp);
-                }
-#endif
 
                 if(actions->command.G8) {
 
@@ -4512,26 +4433,10 @@ status_code_t gc_execute_block (char *block)
         grbl.user_mcode.execute(state_get(), &gc_block);
         gc_block.words.mask = 0;
     }
-    
+
     // [10. Dwell ]:
-#if CUTTER_COMP_ENABLE
-        // If cutter comp is active, enqueue a deferred pause marker in the CC stream.
-        if(gc_block.non_modal_command == NonModal_Dwell){
-            if(cc_mc_is_active()) {
-                if(cc_mc_enqueue_pause_marker(gc_block.values.p) != cc_status_OK)
-                    RETURN(Status_CutterCompInvalid);
-            } else {
-                //otherwise, execute a normal dwell.
-                mc_dwell(gc_block.values.p);
-            }
-        }
-#else
-        if(gc_block.non_modal_command == NonModal_Dwell)
-            mc_dwell(gc_block.values.p);
-#endif                
-
-
-
+    if(gc_block.non_modal_command == NonModal_Dwell)
+        mc_dwell(gc_block.values.p);
 
     // [11. Set active plane ]:
     if(command_words.G2)
@@ -5013,6 +4918,7 @@ status_code_t gc_execute_block (char *block)
     }
 
     if(command_words.G16) switch(gc_block.macro_call) {
+
 #if NGC_PARAMETERS_ENABLE
         case MacroCall_Modal:
         case MacroCall_Modal1:
@@ -5043,7 +4949,8 @@ status_code_t gc_execute_block (char *block)
     // [21. Program flow ]:
     // M0,M1,M2,M30,M60: Perform non-running program flow actions. During a program pause, the buffer may
     // refill and can only be resumed by the cycle start run-time command.
-        if((gc_state.modal.program_flow = gc_block.modal.program_flow) || sys.flags.single_block) {
+    if((gc_state.modal.program_flow = gc_block.modal.program_flow) || sys.flags.single_block) {
+
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
 
         if(gc_state.modal.program_flow == ProgramFlow_Return) {
@@ -5162,7 +5069,6 @@ status_code_t gc_execute_block (char *block)
             if(!check_mode || !settings.flags.m98_prescan_enable)
                 grbl.report.feedback_message(Message_ProgramEnd);
         }
-
         gc_state.modal.program_flow = ProgramFlow_Running; // Reset program flow.
     }
 
@@ -5175,5 +5081,5 @@ status_code_t gc_execute_block (char *block)
 
     // TODO: % to denote start of program.
 
-    return gc_at_exit(Status_OK);
+    return Status_OK;
 }
